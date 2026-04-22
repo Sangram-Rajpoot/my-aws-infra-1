@@ -1,4 +1,4 @@
-name: Deploy Frontend
+name: Terraform + Frontend Deploy
 
 on:
   push:
@@ -9,10 +9,15 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+
     steps:
-      - name: Checkout Code
+      # 1. Checkout Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
+      # 2. Configure AWS Credentials
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -20,8 +25,48 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Upload to S3
-        run: aws s3 sync . s3://${{ secrets.S3_BUCKET }} --delete --exclude ".git/*" --exclude ".github/*"
+      # 3. Install Terraform
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
 
-      - name: CloudFront Invalidation
-        run: aws cloudfront create-invalidation --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} --paths "/*"
+      # 4. Terraform Init
+      - name: Terraform Init
+        run: terraform init
+
+      # 5. Terraform Format Check
+      - name: Terraform Format
+        run: terraform fmt -check
+
+      # 6. Terraform Validate
+      - name: Terraform Validate
+        run: terraform validate
+
+      # 7. Terraform Apply
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
+
+      # 8. Get S3 Bucket Name from Terraform Output
+      - name: Get Bucket Name
+        id: bucket
+        run: echo "bucket_name=$(terraform output -raw bucket_name)" >> $GITHUB_OUTPUT
+
+      # 9. Get CloudFront Distribution URL
+      - name: Get CloudFront URL
+        id: cloudfront
+        run: echo "cloudfront_url=$(terraform output -raw cloudfront_url)" >> $GITHUB_OUTPUT
+
+      # 10. Upload Frontend Files to S3
+      - name: Upload Website to S3
+        run: |
+          aws s3 sync . s3://${{ steps.bucket.outputs.bucket_name }} \
+          --delete \
+          --exclude ".git/*" \
+          --exclude ".github/*" \
+          --exclude ".terraform/*" \
+          --exclude "*.tf" \
+          --exclude "*.tfstate*" \
+          --exclude "*.md"
+
+      # 11. Show Website URL
+      - name: Deployment Success
+        run: echo "Website URL = https://${{ steps.cloudfront.outputs.cloudfront_url }}"
