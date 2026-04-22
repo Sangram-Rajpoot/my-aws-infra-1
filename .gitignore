@@ -1,0 +1,15 @@
+cat <<EOF > .gitignore
+# Local .terraform directory
+.terraform/
+
+# .tfstate files
+*.tfstate
+*.tfstate.backup
+
+# Crash logs
+crash.log
+
+# Sensitive variables
+*.tfvars
+EOF
+.terraform/
